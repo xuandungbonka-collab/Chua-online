@@ -215,9 +215,8 @@ const TRACKS = [
 ];
 /* Add or rename talks here. Files must exist in assets/phapthoai/. */
 const TALKS = [
-  {src:'assets/phapthoai/buong-bo-phien-nao.m4a', name:'Buông bỏ phiền não'},
-  {src:'assets/phapthoai/song-an-lac.mp3', name:'Sống an lạc'},
-  {src:'assets/phapthoai/nhan-qua-cuoc-doi.mp3', name:'Nhân quả cuộc đời'}
+  {src:'assets/phapthoai/loau-thichnhathanh.m4a', name:'Pháp thoại – Thích Nhất Hạnh'},
+  {src:'assets/phapthoai/phapthoai-thichphaphoa.m4a', name:'Pháp thoại – Thích Pháp Hòa'}
 ];
 let talkIdx=0, talkEl=null, talkPlaying=false, musicPaused=false, ttsDucking=false;
 let musicVolume=.12, talkVolume=.90;
@@ -252,7 +251,7 @@ async function startTalk(){
     await AC.resume();await talkEl.play();talkPlaying=true;
     byId('talkPlay').textContent='⏸ Tạm dừng pháp thoại';
     setTalkStatus('Đang phát: '+TALKS[talkIdx].name);updateMusicGain();
-  }catch(e){talkPlaying=false;setTalkStatus('Không thể phát. Kiểm tra MP3 hoặc nhấn Phát lần nữa.');updateMusicGain();}
+  }catch(e){talkPlaying=false;setTalkStatus('Không thể phát. Kiểm tra tệp âm thanh hoặc nhấn Phát lần nữa.');updateMusicGain();}
 }
 function pauseTalk(){if(talkEl)talkEl.pause();talkPlaying=false;byId('talkPlay').textContent='▶ Tiếp tục pháp thoại';updateMusicGain();}
 function setMusicPause(paused){musicPaused=paused;for(const m of musicEls){if(paused)m.el.pause();else m.el.play().catch(()=>{});}byId('musicPlay').textContent=paused?'▶ Phát nhạc':'⏸ Tạm dừng nhạc';}

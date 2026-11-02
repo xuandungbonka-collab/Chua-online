@@ -70,6 +70,16 @@ input::placeholder{color:#7d6a52}
 #toast{position:absolute;left:50%;top:14%;transform:translateX(-50%);z-index:6;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 15px;font-family:var(--display);color:var(--gold);font-size:14px;opacity:0;transition:opacity .4s;pointer-events:none;max-width:88%;text-align:center}
 #toast.show{opacity:1}
 @media (prefers-reduced-motion:reduce){#toast,.msg{transition:none;animation:none}}
+
+/* Bonka Media: pháp thoại and background music controls */
+#audioPanel{position:absolute;z-index:8;top:90px;left:10px;right:10px;max-height:70%;overflow:auto;background:rgba(22,12,8,.96);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 12px 36px #0009}
+#audioPanel h2{margin:0 0 10px;color:var(--gold);font:600 17px var(--display)}
+#audioPanel .audioLine{display:flex;gap:7px;align-items:center;margin:9px 0;flex-wrap:wrap}
+#audioPanel select{width:100%;min-width:0;background:#24150e;color:var(--fg);border:1px solid var(--line);padding:9px;border-radius:8px;font:inherit}
+#audioPanel input[type=range]{width:100%;accent-color:var(--gold);padding:0}
+#audioPanel .audioGroup{border-top:1px solid var(--line);padding-top:9px;margin-top:10px}
+#audioPanel label{display:flex;justify-content:space-between;margin-bottom:4px}
+#audioPanel .audioStatus{font-size:11px;color:var(--muted);line-height:1.5}
 </style>
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}*{box-sizing:border-box}body{margin:0;font-size:14px}[hidden]{display:none!important}</style>
 </head>
@@ -92,10 +102,24 @@ input::placeholder{color:#7d6a52}
     </span>
     <span class="row">
       <button class="btn" id="nextTrack" hidden title="Bài kế tiếp"><span id="nowPlaying">♪</span> ›</button>
-      <button class="btn" id="mute" hidden aria-pressed="false">Tắt nhạc</button>
+      <button class="btn" id="openAudio" hidden>☸ Pháp thoại</button>
+       <button class="btn" id="mute" hidden aria-pressed="false">Tắt nhạc</button>
       <button class="btn" id="leave" hidden>Rời</button>
     </span>
   </div>
+  <section id="audioPanel" hidden aria-label="Điều khiển pháp thoại và nhạc nền">
+    <div class="audioLine" style="justify-content:space-between"><h2>☸ Pháp thoại · Bonka Media</h2><button type="button" class="btn" id="closeAudio">Đóng ✕</button></div>
+    <div class="audioGroup"><label for="talkSelect">Chọn bài pháp thoại</label><select id="talkSelect"></select>
+      <div class="audioLine"><button type="button" class="btn" id="talkPrev">◀ Bài trước</button><button type="button" class="btn primary" id="talkPlay">▶ Phát pháp thoại</button><button type="button" class="btn" id="talkNext">Bài sau ▶</button></div>
+      <label for="talkVolume">Âm lượng pháp thoại <span id="talkVolumeValue">90%</span></label><input type="range" id="talkVolume" min="0" max="100" value="90">
+      <div class="audioStatus" id="talkStatus">Chọn bài và nhấn Phát để nghe.</div>
+    </div>
+    <div class="audioGroup"><label for="musicSelect">Nhạc thiền nền</label><select id="musicSelect"></select>
+      <div class="audioLine"><button type="button" class="btn" id="musicPlay">⏸ Tạm dừng nhạc</button><button type="button" class="btn" id="musicNext">♪ Bài nhạc tiếp</button></div>
+      <label for="musicVolume">Âm lượng nhạc nền <span id="musicVolumeValue">12%</span></label><input type="range" id="musicVolume" min="0" max="100" value="12">
+      <div class="audioStatus">Khi có pháp thoại hoặc lời xướng tên, nhạc nền tự giảm nhẹ.</div>
+    </div>
+  </section>
   <div id="toast" role="status"></div>
   <div id="gate">
     <form id="gateForm">
@@ -189,27 +213,87 @@ const TRACKS = [
   { src:'assets/music/music1.mp3', name:'Trăng trên rừng trúc' },
   { src:'assets/music/music2.mp3', name:'Hơi thở ban mai' },
 ];
+/* Add or rename talks here. Files must exist in assets/phapthoai/. */
+const TALKS = [
+  {src:'assets/phapthoai/buong-bo-phien-nao.mp3', name:'Buông bỏ phiền não'},
+  {src:'assets/phapthoai/song-an-lac.mp3', name:'Sống an lạc'},
+  {src:'assets/phapthoai/nhan-qua-cuoc-doi.mp3', name:'Nhân quả cuộc đời'}
+];
+let talkIdx=0, talkEl=null, talkPlaying=false, musicPaused=false, ttsDucking=false;
+let musicVolume=.12, talkVolume=.90;
 let musicGain=null, musicEls=[], trackIdx=0, duck=1;
+const byId=id=>document.getElementById(id);
+function updateMusicGain(){
+  if(!musicGain||!AC) return;
+  const t=AC.currentTime;
+  musicGain.gain.cancelScheduledValues(t);
+  musicGain.gain.setTargetAtTime(musicVolume * (ttsDucking?.20:talkPlaying?.35:1),t,.12);
+}
+function updateTalkGain(){if(talkEl) talkEl.volume=muted?0:talkVolume;}
+function setTalkStatus(msg){byId('talkStatus').textContent=msg;}
+function stopTalk(){
+  if(talkEl){talkEl.pause();talkEl.removeAttribute('src');talkEl.load();talkEl=null;}
+  talkPlaying=false;byId('talkPlay').textContent='▶ Phát pháp thoại';updateMusicGain();
+}
+function selectTalk(i,autoPlay=false){
+  stopTalk();talkIdx=(i+TALKS.length)%TALKS.length;byId('talkSelect').value=String(talkIdx);
+  setTalkStatus('Đã chọn: '+TALKS[talkIdx].name);
+  if(autoPlay) startTalk();
+}
+async function startTalk(){
+  if(!AC) return;
+  if(!talkEl){
+    const item=TALKS[talkIdx], el=new Audio(item.src);
+    el.preload='metadata';talkEl=el;updateTalkGain();
+    el.addEventListener('ended',()=>{if(talkEl===el)selectTalk(talkIdx+1,true);});
+    el.addEventListener('error',()=>{if(talkEl===el){setTalkStatus('Không tải được '+item.src+'. Kiểm tra tên file trên GitHub.');stopTalk();}});
+  }
+  try{
+    await AC.resume();await talkEl.play();talkPlaying=true;
+    byId('talkPlay').textContent='⏸ Tạm dừng pháp thoại';
+    setTalkStatus('Đang phát: '+TALKS[talkIdx].name);updateMusicGain();
+  }catch(e){talkPlaying=false;setTalkStatus('Không thể phát. Kiểm tra MP3 hoặc nhấn Phát lần nữa.');updateMusicGain();}
+}
+function pauseTalk(){if(talkEl)talkEl.pause();talkPlaying=false;byId('talkPlay').textContent='▶ Tiếp tục pháp thoại';updateMusicGain();}
+function setMusicPause(paused){musicPaused=paused;for(const m of musicEls){if(paused)m.el.pause();else m.el.play().catch(()=>{});}byId('musicPlay').textContent=paused?'▶ Phát nhạc':'⏸ Tạm dừng nhạc';}
+function setupAudioPanel(){
+  for(const [id,items] of [['talkSelect',TALKS],['musicSelect',TRACKS]]){
+    const select=byId(id);select.replaceChildren();items.forEach((item,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=item.name;select.append(o);});
+  }
+  byId('openAudio').onclick=()=>{byId('audioPanel').hidden=!byId('audioPanel').hidden;};
+  byId('closeAudio').onclick=()=>{byId('audioPanel').hidden=true;};
+  byId('talkSelect').onchange=e=>selectTalk(Number(e.target.value));
+  byId('talkPrev').onclick=()=>selectTalk(talkIdx-1,talkPlaying);
+  byId('talkNext').onclick=()=>selectTalk(talkIdx+1,talkPlaying);
+  byId('talkPlay').onclick=()=>talkPlaying?pauseTalk():startTalk();
+  byId('musicSelect').onchange=e=>{if(AC)playTrack(Number(e.target.value));};
+  byId('musicNext').onclick=()=>{if(AC)playTrack(trackIdx+1);};
+  byId('musicPlay').onclick=()=>setMusicPause(!musicPaused);
+  byId('talkVolume').oninput=e=>{talkVolume=Number(e.target.value)/100;byId('talkVolumeValue').textContent=e.target.value+'%';updateTalkGain();};
+  byId('musicVolume').oninput=e=>{musicVolume=Number(e.target.value)/100;byId('musicVolumeValue').textContent=e.target.value+'%';updateMusicGain();};
+}
+setupAudioPanel();
 function audioStart(){
   if (AC) return;
   AC = new (window.AudioContext||window.webkitAudioContext)(); master = AC.createGain(); master.gain.value=.8; master.connect(AC.destination);
-  musicGain = AC.createGain(); musicGain.gain.value=.55; musicGain.connect(master);
+  musicGain = AC.createGain(); musicGain.gain.value=musicVolume; musicGain.connect(master);
   playTrack(Math.floor(Math.random()*TRACKS.length));
   bell(); bellTimer=setInterval(bell, 45000); mokTimer=setInterval(mok, 1150);
 }
 function playTrack(i){
   trackIdx = (i+TRACKS.length)%TRACKS.length; const tr = TRACKS[trackIdx];
-  const el = new Audio(tr.src); el.preload='auto'; el.crossOrigin='anonymous';
+  const el = new Audio(tr.src); el.preload='auto';
   const src = AC.createMediaElementSource(el), g = AC.createGain(); g.gain.value=0; src.connect(g); g.connect(musicGain);
   const now = AC.currentTime; g.gain.linearRampToValueAtTime(1, now+4);
   for (const old of musicEls){ old.g.gain.cancelScheduledValues(now); old.g.gain.setValueAtTime(old.g.gain.value, now); old.g.gain.linearRampToValueAtTime(0, now+4); setTimeout(()=>{ try{old.el.pause();}catch(e){} }, 4200); }
   musicEls = [{el,g}];
   el.addEventListener('timeupdate', ()=>{ if (el.duration && el.duration-el.currentTime < 4 && !el._next){ el._next=true; playTrack(trackIdx+1); } });
   el.addEventListener('error', ()=>{ if (TRACKS.length>1 && !el._next){ el._next=true; playTrack(trackIdx+1); } });
-  el.play().catch(()=>{});
+  if(!musicPaused)el.play().catch(()=>{});
+  byId('musicSelect').value=String(trackIdx);
   const nt=document.getElementById('nowPlaying'); if (nt) nt.textContent = '♪ ' + tr.name;
 }
-function setDuck(on){ if(!musicGain) return; const t=AC.currentTime; musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(musicGain.gain.value,t); musicGain.gain.linearRampToValueAtTime(on?.18:.55, t+.4); }
+function setDuck(on){ttsDucking=on;updateMusicGain();}
 function bell(big){
   if(!AC||muted) return; const t=AC.currentTime, k = big?1.6:1;
   for (const [f,a,d] of [[432,.5,6],[1296,.18,3.5],[2160,.08,2.2]]) { const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f/(big?2:1); const g=AC.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(a*k,t+.02); g.gain.exponentialRampToValueAtTime(.0005,t+d*k); o.connect(g); g.connect(master); o.start(t); o.stop(t+d*k+.1); }
@@ -284,13 +368,13 @@ form.addEventListener('submit', e=>{
   audioStart();
   me = addVisitor(name, mySkin, false, true);
   gate.hidden=true; document.getElementById('me').hidden=false; document.getElementById('meName').textContent=name;
-  for (const id of ['mute','leave','gifts','nextTrack']) document.getElementById(id).hidden=false;
+  for (const id of ['mute','leave','gifts','nextTrack','openAudio']) document.getElementById(id).hidden=false;
   say(name,' đã vào chánh điện'); showToast('Hoan nghênh '+name+' vào chánh điện'); ttsSpeak('Hoan nghênh '+name+' vào chánh điện');
 });
 document.getElementById('gifts').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b||!me) return; donate(me, +b.dataset.coins, b.dataset.fx, SUTRA[Math.floor(Math.random()*SUTRA.length)]); });
 document.getElementById('nextTrack').addEventListener('click', ()=>{ if(AC) playTrack(trackIdx+1); });
-document.getElementById('mute').addEventListener('click', e=>{ muted=!muted; if(master) master.gain.value=muted?0:.8; e.currentTarget.textContent=muted?'Bật nhạc':'Tắt nhạc'; e.currentTarget.setAttribute('aria-pressed',muted); });
-document.getElementById('leave').addEventListener('click', ()=>{ removeVisitor(me); me=null; gate.hidden=false; document.getElementById('me').hidden=true; for (const id of ['mute','leave','gifts','nextTrack']) document.getElementById(id).hidden=true; for (const m of musicEls){ try{m.el.pause();}catch(e){} } musicEls=[]; if (AC){ AC.close(); AC=null; } clearInterval(mokTimer); clearInterval(bellTimer); renderBoard(); });
+document.getElementById('mute').addEventListener('click', e=>{ muted=!muted; if(master) master.gain.value=muted?0:.8; updateTalkGain(); e.currentTarget.textContent=muted?'Bật nhạc':'Tắt nhạc'; e.currentTarget.setAttribute('aria-pressed',muted); });
+document.getElementById('leave').addEventListener('click', ()=>{ stopTalk(); byId('audioPanel').hidden=true; removeVisitor(me); me=null; gate.hidden=false; document.getElementById('me').hidden=true; for (const id of ['mute','leave','gifts','nextTrack','openAudio']) document.getElementById(id).hidden=true; for (const m of musicEls){ try{m.el.pause();}catch(e){} } musicEls=[]; if (AC){ AC.close(); AC=null; } clearInterval(mokTimer); clearInterval(bellTimer); renderBoard(); });
 canvas.addEventListener('pointerdown', ()=>{ if(!me||me.state!=='sit') return; const s=SUTRA[Math.floor(Math.random()*SUTRA.length)]; say(me.name,' '+s); me.bow=1; floaters.push({x:me.seat.x,y:me.seat.y-80,vx:0,vy:-70,t:0,life:2,s:.14}); });
 // demo activity: random comments and small gifts from the crowd
 setInterval(()=>{ if (visitors.length<2) return; const v=visitors[Math.floor(Math.random()*visitors.length)]; if (v===me) return;

@@ -274,7 +274,7 @@ async function chooseRegion(key){
     byId('openRegion').textContent='⌂ '+REGIONS[key].label;
     byId('regionStatus').textContent='Đã chọn '+REGIONS[key].label;
     byId('regionPanel').hidden=true;
-  }catch(e){if(req===regionRequest)byId('regionStatus').textContent='Không tải được ảnh. Kiểm tra file trong thư mục assets/.';}
+  }catch(e){if(req===regionRequest){console.error(e);byId('regionStatus').textContent='Không tải được '+REGIONS[key].src+'. Hãy kiểm tra tên và vị trí file trên GitHub. Bạn vẫn có thể đóng bảng để sử dụng ứng dụng.';}}
 }
 function setupRegions(){
   byId('openRegion').onclick=()=>{byId('regionPanel').hidden=false;};
@@ -283,7 +283,7 @@ function setupRegions(){
   byId('openRegion').textContent='⌂ '+REGIONS[region].label;
   document.querySelectorAll('.regionChoice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.region===region)));
   const initialRegion=region;
-  loadRegionImage(initialRegion).then(im=>{if(region===initialRegion)A.hall=im;}).catch(()=>{});
+  loadRegionImage(initialRegion).then(im=>{if(region===initialRegion)A.hall=im;}).catch(err=>console.warn(err.message));
 }
 setupRegions();
 
@@ -305,7 +305,7 @@ function selectTalk(i,autoPlay=false){
   if(autoPlay) startTalk();
 }
 async function startTalk(){
-  if(!AC) return;
+  if(!AC){try{audioStart();}catch(e){setTalkStatus('Không thể khởi tạo âm thanh trên trình duyệt này.');return;}}
   if(!talkEl){
     const item=TALKS[talkIdx], el=new Audio(item.src);
     el.preload='metadata';talkEl=el;updateTalkGain();
@@ -429,9 +429,10 @@ form.addEventListener('submit', e=>{
   const name=input.value.trim().replace(/\s+/g,' ').slice(0,20); if(!name) return;
   if(!freeSeat()){ showToast('Chánh điện đã kín chỗ, xin chờ một lát.'); return; }
   try{ localStorage.setItem('phapdanh',name); }catch(e){}
-  audioStart();
+  // Enter the hall even when audio is unavailable or blocked.
+  try { audioStart(); } catch (err) { console.error('Audio initialization failed:', err); showToast('Âm thanh chưa sẵn sàng; vẫn có thể vào chánh điện.'); }
   me = addVisitor(name, mySkin, false, true);
-  gate.hidden=true; byId('regionPanel').hidden=false; document.getElementById('me').hidden=false; document.getElementById('meName').textContent=name;
+  gate.hidden=true; byId('regionPanel').hidden=false; byId('regionStatus').textContent='Chọn một miền để tiếp tục. Nếu ảnh chưa tải, kiểm tra assets/hall-bac.webp, hall-trung.webp, hall-nam.webp.'; document.getElementById('me').hidden=false; document.getElementById('meName').textContent=name;
   for (const id of ['mute','leave','gifts','nextTrack','openAudio','openRegion']) document.getElementById(id).hidden=false;
   say(name,' đã vào chánh điện'); showToast('Hoan nghênh '+name+' vào chánh điện'); ttsSpeak('Hoan nghênh '+name+' vào chánh điện');
 });
